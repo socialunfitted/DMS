@@ -1,0 +1,12 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/api/webhooks/meta/route": "app/api/webhooks/meta/route.js",
+  "/api/webhooks/razorpay/route": "app/api/webhooks/razorpay/route.js",
+  "/page": "app/page.js",
+  "/store/[slug]/page": "app/store/[slug]/page.js",
+  "/dashboard/channels/page": "app/dashboard/channels/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/dashboard/workflows/page": "app/dashboard/workflows/page.js",
+  "/dashboard/inbox/page": "app/dashboard/inbox/page.js",
+  "/dashboard/store/page": "app/dashboard/store/page.js"
+}
