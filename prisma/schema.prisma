@@ -1,0 +1,225 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum ChannelType {
+  INSTAGRAM
+  FACEBOOK
+  WHATSAPP
+  YOUTUBE
+}
+
+enum TriggerType {
+  KEYWORD_DM
+  COMMENT_KEYWORD
+  STORY_MENTION
+  YOUTUBE_COMMENT
+  ORDER_SUCCESS
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+model User {
+  id            String            @id @default(cuid())
+  email         String            @unique
+  name          String?
+  image         String?
+  passwordHash  String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  memberships   WorkspaceMember[]
+  subscriptions Subscription[]
+}
+
+model Organization {
+  id          String      @id @default(cuid())
+  name        String
+  slug        String      @unique
+  isAgency    Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  workspaces  Workspace[]
+}
+
+model Workspace {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  slug           String            @unique
+  createdAt      DateTime          @default(now())
+  members        WorkspaceMember[]
+  channels       SocialAccount[]
+  flows          AutomationFlow[]
+  products       Product[]
+  orders         Order[]
+  contacts       Contact[]
+  storeSettings  StoreSettings?
+}
+
+model WorkspaceMember {
+  id          String    @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        Role      @default(MEMBER)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+}
+
+model SocialAccount {
+  id             String           @id @default(cuid())
+  workspaceId    String
+  provider       ChannelType
+  accountId      String           // Meta Page ID / IG User ID / WABA Phone ID / YT Channel ID
+  accountName    String
+  accessToken    String           // Encrypted AES-256
+  refreshToken   String?          // Encrypted
+  tokenExpiresAt DateTime?
+  isActive       Boolean          @default(true)
+  workspace      Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  flows          AutomationFlow[]
+
+  @@unique([workspaceId, provider, accountId])
+}
+
+model AutomationFlow {
+  id              String        @id @default(cuid())
+  workspaceId     String
+  socialAccountId String?
+  name            String
+  triggerType     TriggerType
+  triggerKeywords String[]
+  nodesJson       Json          // Flow graph node state
+  edgesJson       Json          // Flow graph edge routing state
+  isActive        Boolean       @default(false)
+  workspace       Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  socialAccount   SocialAccount? @relation(fields: [socialAccountId], references: [id], onDelete: SetNull)
+  logs            ExecutionLog[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model Contact {
+  id             String         @id @default(cuid())
+  workspaceId    String
+  platform       ChannelType
+  platformUserId String
+  name           String?
+  username       String?
+  email          String?
+  phone          String?
+  tags           String[]
+  metadata       Json?
+  workspace      Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversations  Conversation[]
+  orders         Order[]
+  createdAt      DateTime       @default(now())
+
+  @@unique([workspaceId, platform, platformUserId])
+}
+
+model Conversation {
+  id               String    @id @default(cuid())
+  contactId        String
+  contact          Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  channel          ChannelType
+  isPausedForHuman Boolean   @default(false)
+  messages         Message[]
+  updatedAt        DateTime  @updatedAt
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderType     String       // USER | BOT | AGENT
+  content        String
+  mediaUrl       String?
+  createdAt      DateTime     @default(now())
+}
+
+model Product {
+  id          String      @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  price       Float
+  currency    String      @default("INR")
+  fileUrl     String?     // S3 / R2 protected link
+  isPublished Boolean     @default(true)
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  orderItems  OrderItem[]
+  createdAt   DateTime    @default(now())
+}
+
+model Order {
+  id             String      @id @default(cuid())
+  workspaceId    String
+  contactId      String?
+  totalAmount    Float
+  currency       String      @default("INR")
+  status         OrderStatus @default(PENDING)
+  paymentGateway String      // RAZORPAY | STRIPE
+  paymentId      String?     // Gateway Transaction ID
+  workspace      Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contact        Contact?    @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  items          OrderItem[]
+  createdAt      DateTime    @default(now())
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  productId String
+  price     Float
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model StoreSettings {
+  id              String    @id @default(cuid())
+  workspaceId     String    @unique
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  storeName       String
+  customDomain    String?
+  razorpayKeyId   String?
+  razorpaySecret  String?   // Encrypted
+  stripePublicKey String?
+  stripeSecretKey String?   // Encrypted
+}
+
+model Subscription {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan             String   // STARTER | PRO | AGENCY
+  status           String   // ACTIVE | CANCELED | PAST_DUE
+  currentPeriodEnd DateTime
+  createdAt        DateTime @default(now())
+}
+
+model ExecutionLog {
+  id        String         @id @default(cuid())
+  flowId    String
+  flow      AutomationFlow @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  status    String         // SUCCESS | FAILED
+  details   Json
+  createdAt DateTime       @default(now())
+}
